@@ -1,3 +1,6 @@
+# Adversarial ML Project 1: Membership Inference Attacks
+## Mish, Syed, and Cooper
+
 # MIAdefenseSELENA
 By Xinyu Tang, Saeed Mahloujifar, Liwei Song, Virat Shejwalkar, Milad Nasr, Amir Houmansadr, Prateek Mittal
 

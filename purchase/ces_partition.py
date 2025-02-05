@@ -6,7 +6,7 @@ import pickle
 import numpy as np
 import yaml
 
-config_file = './env.yml'
+config_file = './../env.yml'
 with open(config_file, 'r') as stream:
     yamlfile = yaml.safe_load(stream)
     root_dir = yamlfile['root_dir']
@@ -87,7 +87,6 @@ def main():
     np.save(os.path.join(DATASET_PATH, 'partition', 'train_label_s.npy'), train_label_s)
     np.save(os.path.join(DATASET_PATH, 'partition', 'test_data_s.npy'), test_data_s)
     np.save(os.path.join(DATASET_PATH, 'partition', 'test_label_s.npy'), test_label_s)
-    print(f"{DATASET_PATH}")
     
 if __name__ == '__main__':
     main()
