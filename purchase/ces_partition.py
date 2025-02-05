@@ -87,6 +87,8 @@ def main():
     np.save(os.path.join(DATASET_PATH, 'partition', 'train_label_s.npy'), train_label_s)
     np.save(os.path.join(DATASET_PATH, 'partition', 'test_data_s.npy'), test_data_s)
     np.save(os.path.join(DATASET_PATH, 'partition', 'test_label_s.npy'), test_label_s)
+
+    print(DATASET_PATH)
     
 if __name__ == '__main__':
     main()

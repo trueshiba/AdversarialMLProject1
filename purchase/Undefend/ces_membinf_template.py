@@ -27,9 +27,11 @@ sys.path.append(root_dir)
 # print(src_dir)
 sys.path.append(os.path.join(src_dir, 'attack'))
 sys.path.append(os.path.join(src_dir, 'models'))
+sys.path.insert(0, './../../../Project1')
 from utils import mkdir_p, AverageMeter, accuracy, print_acc_conf
 
 # NOTE: Here is the victim model definition.
+sys.path.insert(0, './../../models')
 from purchase import PurchaseClassifier
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -201,6 +203,30 @@ def main():
     train_model(model_v,
                 train_data_v, train_label_v, test_data_v, test_label_v,
                 classifier_epochs, batch_size)
+    
+
+
+    # Create Shadow model based off of the Victim Classifier and then train with generated datasets
+    train_data_s = np.load(os.path.join(DATASET_PATH, 'partition', 'train_data_s.npy'))
+    train_label_s = np.load(os.path.join(DATASET_PATH, 'partition', 'train_label_s.npy'))
+    test_data_s = np.load(os.path.join(DATASET_PATH, 'partition', 'test_data_s.npy'))
+    test_label_s = np.load(os.path.join(DATASET_PATH, 'partition', 'test_label_s.npy'))
+
+    print("SHADOW CLASSIFIER TRAINING/EVALUATION")
+    model_s = PurchaseClassifier()
+    train_model(model_s,
+                train_data_s, train_label_s, test_data_s, test_label_s,
+                classifier_epochs, batch_size)
+
+    # Use attack_data() to get attack model dataset
+
+
+    # Train attack model on attack dataset
+
+
+
+
+
 
 if __name__ == '__main__':
     main()
