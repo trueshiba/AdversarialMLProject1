@@ -6,7 +6,7 @@ import pickle
 import numpy as np
 import yaml
 
-config_file = './../env.yml'
+config_file = './env.yml'
 with open(config_file, 'r') as stream:
     yamlfile = yaml.safe_load(stream)
     root_dir = yamlfile['root_dir']

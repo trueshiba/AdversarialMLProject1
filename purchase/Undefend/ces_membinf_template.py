@@ -205,7 +205,7 @@ def main():
     attack_epochs = args.attack_epochs
     classifier_epochs = args.classifier_epochs
 
-    DATASET_PATH = os.path.join(root_dir, 'purchase',  'data')
+    DATASET_PATH = os.path.join(root_dir, 'purchase', 'data')
   
     # Reading in the victim train and test sets, created with
     # MIAdefenseSELENA/purchase/ces_partition.py.
