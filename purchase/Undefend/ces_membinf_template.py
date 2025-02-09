@@ -14,8 +14,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from torchsummary import summary
 
-config_file = './../../env.yml'
+config_file = './../env.yml'
 with open(config_file, 'r') as stream:
     yamlfile = yaml.safe_load(stream)
     root_dir = yamlfile['root_dir']
@@ -27,12 +28,16 @@ sys.path.append(root_dir)
 # print(src_dir)
 sys.path.append(os.path.join(src_dir, 'attack'))
 sys.path.append(os.path.join(src_dir, 'models'))
+sys.path.insert(0, './../../../Project1')
 from utils import mkdir_p, AverageMeter, accuracy, print_acc_conf
 
 # NOTE: Here is the victim model definition.
+sys.path.insert(0, './../../models')
 from purchase import PurchaseClassifier
+from adversary import AttackModel
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(device)
 
 def train(train_data, train_labels, model, criterion, optimizer, batch_size):
     # switch to train mode
@@ -149,23 +154,36 @@ def train_model(model, train_data, train_label, test_data, test_label, epochs, b
 # in the attack dataset, with label 0 if the sample comes from test_data,
 # and 1 if the sample comes from train_data.
 def attack_data(model, train_data, test_data):
+
+    # if not train_data.is_cuda:
+    #     train_data.to(device)
+    # elif not test_data.is_cuda:
+    #     test_data.to(device)
+
     model.eval()
     
-    train_inputs = torch.from_numpy(train_data).type(torch.FloatTensor)
+    train_inputs = torch.from_numpy(train_data).type(torch.FloatTensor).to(device)
     train_outputs = F.softmax(model(train_inputs),dim=1)
     
-    test_inputs = torch.from_numpy(test_data).type(torch.FloatTensor)
+    test_inputs = torch.from_numpy(test_data).type(torch.FloatTensor).to(device)
     test_outputs = F.softmax(model(train_inputs),dim=1)  
 
     zerovec = np.full(len(test_data), 0)
     onevec = np.full(len(train_data), 1)
 
-    pre_xta = torch.cat((train_outputs, test_outputs)).detach().numpy()
-    data_a = np.hstack((np.vstack((train_inputs.detach().numpy(),test_inputs.detach().numpy())),
+    pre_xta = torch.cat((train_outputs, test_outputs)).detach().cpu().numpy()
+    data_a = np.hstack((np.vstack((train_inputs.detach().cpu().numpy(),test_inputs.detach().cpu().numpy())),
                         pre_xta))
     label_a = np.hstack((onevec,zerovec))
 
     return data_a, label_a
+
+
+def format_result(results):
+    for i, row in enumerate(results):
+        print(f"S{i}:")
+        for j, p in enumerate(row):
+            print(f"No/Yes {j}: {p: .2f}%")
     
 def main():
     parser = argparse.ArgumentParser(description='undefend training for Purchase dataset')
@@ -189,8 +207,18 @@ def main():
     
     train_data_v = np.load(os.path.join(DATASET_PATH, 'partition', 'train_data_v.npy'))
     train_label_v = np.load(os.path.join(DATASET_PATH, 'partition', 'train_label_v.npy'))
+
+    dumby_data = torch.from_numpy(train_data_v[-10:][:]).type(torch.FloatTensor)
+    train_data_v = train_data_v[:-10][:]
+    train_label_v = train_label_v[:-10][:]
+
     test_data_v = np.load(os.path.join(DATASET_PATH, 'partition', 'test_data_v.npy'))
     test_label_v = np.load(os.path.join(DATASET_PATH, 'partition', 'test_label_v.npy'))
+
+    test_data_v = test_data_v[:-10][:]
+    test_label_v = test_label_v[:-10][:]
+    
+
 
     # Training the victim model. Hyperparameters can be provided at command-line
     # with defaults defined at beginning of main above. Note that the victim model
@@ -201,6 +229,67 @@ def main():
     train_model(model_v,
                 train_data_v, train_label_v, test_data_v, test_label_v,
                 classifier_epochs, batch_size)
+    
+
+
+    # Create Shadow model based off of the Victim Classifier and then train with generated datasets
+    train_data_s = np.load(os.path.join(DATASET_PATH, 'partition', 'train_data_s.npy'))
+    train_label_s = np.load(os.path.join(DATASET_PATH, 'partition', 'train_label_s.npy'))
+    test_data_s = np.load(os.path.join(DATASET_PATH, 'partition', 'test_data_s.npy'))
+    test_label_s = np.load(os.path.join(DATASET_PATH, 'partition', 'test_label_s.npy'))
+
+    print("SHADOW CLASSIFIER TRAINING/EVALUATION")
+    model_s = PurchaseClassifier()
+    #summary(model_s, (512, 600))
+    train_model(model_s,
+                train_data_s, train_label_s, test_data_s, test_label_s,
+                classifier_epochs, batch_size)
+
+    
+
+    # Train attack model on attack dataset
+    print("ATTACK CLASSIFIER TRAINING/EVALUATION")
+    model_a = AttackModel()
+
+    # Use attack_data() to get attack model dataset
+    data_a, label_a = attack_data(model_s, train_data_s, test_data_s)
+
+    summary(model_a, (512, 700))
+    # big_data = np.concatenate((train_data_v, test_data_v))
+    # big_labels = np.concatenate((train_label_v, test_label_v))
+
+    test_a, test_labels_a = attack_data(model_s, train_data_v, test_data_v)
+
+    train_model(model_a, data_a, label_a, test_a, test_labels_a, classifier_epochs, batch_size)
+
+
+
+    # Testing again on our random choice data
+    model_a.eval()    
+    torch.set_printoptions(precision=2)
+
+    print("\nShould be all yes")  
+    gen = np.random.default_rng()    
+    randomSamples = torch.from_numpy(gen.choice(train_data_v, 10, replace=False)).type(torch.FloatTensor).to(device)    
+    #print(randomSamples.shape)     
+    logits = model_a(torch.hstack((randomSamples.to(device), model_v(randomSamples).to(device))))
+    format_result(F.softmax(logits, dim=1)*100)    
+
+    print("\nShould be no")
+    nonsenseSamples = torch.rand(randomSamples.shape)    
+    logits = model_a(torch.hstack((nonsenseSamples.to(device), model_v(nonsenseSamples.to(device)).to(device))))    
+    format_result(F.softmax(logits, dim=1)*100) 
+
+    print("\nShould definitely be no")
+    logits = model_a(torch.hstack((dumby_data.to(device), model_v(dumby_data.to(device)).to(device))))    
+    dummy_perc = F.softmax(logits, dim=1)*100
+    format_result(dummy_perc)
+    
+
+
+
+
+
 
 if __name__ == '__main__':
     main()
