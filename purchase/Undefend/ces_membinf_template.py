@@ -177,6 +177,13 @@ def attack_data(model, train_data, test_data):
     label_a = np.hstack((onevec,zerovec))
 
     return data_a, label_a
+
+
+def format_result(results):
+    for i, row in enumerate(results):
+        print(f"S{i}:")
+        for j, p in enumerate(row):
+            print(f"No/Yes {j}: {p: .2f}%")
     
 def main():
     parser = argparse.ArgumentParser(description='undefend training for Purchase dataset')
@@ -200,8 +207,18 @@ def main():
     
     train_data_v = np.load(os.path.join(DATASET_PATH, 'partition', 'train_data_v.npy'))
     train_label_v = np.load(os.path.join(DATASET_PATH, 'partition', 'train_label_v.npy'))
+
+    dumby_data = torch.from_numpy(train_data_v[-10:][:]).type(torch.FloatTensor)
+    train_data_v = train_data_v[:-10][:]
+    train_label_v = train_label_v[:-10][:]
+
     test_data_v = np.load(os.path.join(DATASET_PATH, 'partition', 'test_data_v.npy'))
     test_label_v = np.load(os.path.join(DATASET_PATH, 'partition', 'test_label_v.npy'))
+
+    test_data_v = test_data_v[:-10][:]
+    test_label_v = test_label_v[:-10][:]
+    
+
 
     # Training the victim model. Hyperparameters can be provided at command-line
     # with defaults defined at beginning of main above. Note that the victim model
@@ -228,14 +245,14 @@ def main():
                 train_data_s, train_label_s, test_data_s, test_label_s,
                 classifier_epochs, batch_size)
 
-    # Use attack_data() to get attack model dataset
     
-    data_a, label_a = attack_data(model_s, train_data_s, test_data_s)
 
     # Train attack model on attack dataset
     print("ATTACK CLASSIFIER TRAINING/EVALUATION")
     model_a = AttackModel()
-    print(data_a.shape)
+
+    # Use attack_data() to get attack model dataset
+    data_a, label_a = attack_data(model_s, train_data_s, test_data_s)
 
     summary(model_a, (512, 700))
     # big_data = np.concatenate((train_data_v, test_data_v))
@@ -245,7 +262,29 @@ def main():
 
     train_model(model_a, data_a, label_a, test_a, test_labels_a, classifier_epochs, batch_size)
 
-    # Option 1: Using the 
+
+
+    # Testing again on our random choice data
+    model_a.eval()    
+    torch.set_printoptions(precision=2)
+
+    print("\nShould be all yes")  
+    gen = np.random.default_rng()    
+    randomSamples = torch.from_numpy(gen.choice(train_data_v, 10, replace=False)).type(torch.FloatTensor).to(device)    
+    #print(randomSamples.shape)     
+    logits = model_a(torch.hstack((randomSamples.to(device), model_v(randomSamples).to(device))))
+    format_result(F.softmax(logits, dim=1)*100)    
+
+    print("\nShould be no")
+    nonsenseSamples = torch.rand(randomSamples.shape)    
+    logits = model_a(torch.hstack((nonsenseSamples.to(device), model_v(nonsenseSamples.to(device)).to(device))))    
+    format_result(F.softmax(logits, dim=1)*100) 
+
+    print("\nShould definitely be no")
+    logits = model_a(torch.hstack((dumby_data.to(device), model_v(dumby_data.to(device)).to(device))))    
+    dummy_perc = F.softmax(logits, dim=1)*100
+    format_result(dummy_perc)
+    
 
 
 

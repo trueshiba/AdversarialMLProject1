@@ -19,6 +19,7 @@ class PurchaseClassifier(nn.Module):
         self.classifier = nn.Linear(128,num_classes)
         
     def forward(self,x):
+        
         hidden_out = self.features(x)
         out = self.classifier(hidden_out)
         return out
