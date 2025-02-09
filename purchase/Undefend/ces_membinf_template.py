@@ -180,10 +180,15 @@ def attack_data(model, train_data, test_data):
 
 
 def format_result(results):
+    no = 0
+    yes = 0
     for i, row in enumerate(results):
-        print(f"S{i}:")
-        for j, p in enumerate(row):
-            print(f"No/Yes {j}: {p: .2f}%")
+        if row[0] > row[1]:
+            no += 1
+        else:
+            yes +=1 
+    print(f"Yes: {yes} | No: {no} ")
+            
     
 def main():
     parser = argparse.ArgumentParser(description='undefend training for Purchase dataset')
@@ -207,16 +212,17 @@ def main():
     
     train_data_v = np.load(os.path.join(DATASET_PATH, 'partition', 'train_data_v.npy'))
     train_label_v = np.load(os.path.join(DATASET_PATH, 'partition', 'train_label_v.npy'))
+    
 
-    dumby_data = torch.from_numpy(train_data_v[-10:][:]).type(torch.FloatTensor)
-    train_data_v = train_data_v[:-10][:]
-    train_label_v = train_label_v[:-10][:]
+    dumby_data = torch.from_numpy(train_data_v[:10][:]).type(torch.FloatTensor)
+    train_data_v = train_data_v[10:][:]
+    train_label_v = train_label_v[10:][:]
 
     test_data_v = np.load(os.path.join(DATASET_PATH, 'partition', 'test_data_v.npy'))
     test_label_v = np.load(os.path.join(DATASET_PATH, 'partition', 'test_label_v.npy'))
 
-    test_data_v = test_data_v[:-10][:]
-    test_label_v = test_label_v[:-10][:]
+    test_data_v = test_data_v[10:][:]
+    test_label_v = test_label_v[10:][:]
     
 
 
@@ -258,7 +264,7 @@ def main():
     # big_data = np.concatenate((train_data_v, test_data_v))
     # big_labels = np.concatenate((train_label_v, test_label_v))
 
-    test_a, test_labels_a = attack_data(model_s, train_data_v, test_data_v)
+    test_a, test_labels_a = attack_data(model_v, train_data_v, test_data_v)
 
     train_model(model_a, data_a, label_a, test_a, test_labels_a, classifier_epochs, batch_size)
 
@@ -271,7 +277,6 @@ def main():
     print("\nShould be all yes")  
     gen = np.random.default_rng()    
     randomSamples = torch.from_numpy(gen.choice(train_data_v, 10, replace=False)).type(torch.FloatTensor).to(device)    
-    #print(randomSamples.shape)     
     logits = model_a(torch.hstack((randomSamples.to(device), model_v(randomSamples).to(device))))
     format_result(F.softmax(logits, dim=1)*100)    
 
