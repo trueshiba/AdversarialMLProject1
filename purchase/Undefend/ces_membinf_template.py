@@ -16,7 +16,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torchsummary import summary
 
-config_file = './../env.yml'
+config_file = './../../env.yml'
 with open(config_file, 'r') as stream:
     yamlfile = yaml.safe_load(stream)
     root_dir = yamlfile['root_dir']
@@ -34,10 +34,20 @@ from utils import mkdir_p, AverageMeter, accuracy, print_acc_conf
 # NOTE: Here is the victim model definition.
 sys.path.insert(0, './../../models')
 from purchase import PurchaseClassifier
+
+
+
+# This is our adversary model we import from within the models directory
 from adversary import AttackModel
 
+
+
+# Set to run on GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
+
+
+
 
 def train(train_data, train_labels, model, criterion, optimizer, batch_size):
     # switch to train mode
@@ -68,6 +78,10 @@ def train(train_data, train_labels, model, criterion, optimizer, batch_size):
         top1.update(prec1.item()/100.0, inputs.size()[0])
 
     return (losses.avg, top1.avg)
+
+
+
+
 
 def train_eval(test_data, labels, model, criterion, batch_size):
     # switch to evaluate mode
@@ -102,6 +116,9 @@ def train_eval(test_data, labels, model, criterion, batch_size):
     return (losses.avg, top1.avg, 0)
 
 
+
+
+
 def save_checkpoint(state, is_best, checkpoint, filename='checkpoint.pth.tar'):
     if not os.path.isdir(checkpoint):
         mkdir_p(checkpoint)
@@ -109,6 +126,10 @@ def save_checkpoint(state, is_best, checkpoint, filename='checkpoint.pth.tar'):
     torch.save(state, filepath)
     if is_best:
         shutil.copyfile(filepath, os.path.join(checkpoint, 'model_best.pth.tar'))
+
+
+
+
 
 def train_model(model, train_data, train_label, test_data, test_label, epochs, batch_size):
     model = model.to(device,torch.float)
@@ -148,6 +169,9 @@ def train_model(model, train_data, train_label, test_data, test_label, epochs, b
         print('Epoch: [{:d} | {:d}]: training loss: {:.4f} training|train|test acc: {:.4f}|{:.4f}|{:.4f}.'.format(epoch, epochs, train_loss, trainning_acc, train_acc, test_acc))
         sys.stdout.flush()
 
+
+
+
 # This function builds an attack dataset for training the attack model.
 # Given a model, train_data, and test_data, this function will compute
 # the softmax outer layer and append it to each input sample for inclusion
@@ -179,6 +203,9 @@ def attack_data(model, train_data, test_data):
     return data_a, label_a
 
 
+
+
+# Use this to format our results when manually evaluating model
 def format_result(results):
     no = 0
     yes = 0
@@ -190,6 +217,8 @@ def format_result(results):
     print(f"Yes: {yes} | No: {no} ")
             
     
+
+
 def main():
     parser = argparse.ArgumentParser(description='undefend training for Purchase dataset')
     parser.add_argument('--attack_epochs', type = int, default = 150, help = 'attack epochs in NN attack')
@@ -214,6 +243,7 @@ def main():
     train_label_v = np.load(os.path.join(DATASET_PATH, 'partition', 'train_label_v.npy'))
     
 
+    #Separate dumby data to feed into final model
     dumby_data = torch.from_numpy(train_data_v[:10][:]).type(torch.FloatTensor)
     train_data_v = train_data_v[10:][:]
     train_label_v = train_label_v[10:][:]
@@ -271,24 +301,33 @@ def main():
 
 
     # Testing again on our random choice data
+
+    # grab items from test set for attack model
     model_a.eval()    
+    model_v.eval()
     torch.set_printoptions(precision=2)
 
-    print("\nShould be all yes")  
+    print("\n From victim training data:")  
     gen = np.random.default_rng()    
     randomSamples = torch.from_numpy(gen.choice(train_data_v, 10, replace=False)).type(torch.FloatTensor).to(device)    
-    logits = model_a(torch.hstack((randomSamples.to(device), model_v(randomSamples).to(device))))
-    format_result(F.softmax(logits, dim=1)*100)    
+    logits = model_a(torch.hstack((randomSamples.to(device), F.softmax(model_v(randomSamples).to(device), dim=1))))
+    results = F.softmax(logits, dim=1)*100
+    format_result(results)    
+    print(results)
 
-    print("\nShould be no")
-    nonsenseSamples = torch.rand(randomSamples.shape)    
-    logits = model_a(torch.hstack((nonsenseSamples.to(device), model_v(nonsenseSamples.to(device)).to(device))))    
-    format_result(F.softmax(logits, dim=1)*100) 
+    # print("\nS")
+    # nonsenseSamples = torch.rand(randomSamples.shape)    
+    # logits = model_a(torch.hstack((nonsenseSamples.to(device), F.softmax(model_v(nonsenseSamples.to(device)).to(device), dim=1))))    
+    # results = F.softmax(logits, dim=1)*100
+    # format_result(results)    
+    # print(results)
 
-    print("\nShould definitely be no")
-    logits = model_a(torch.hstack((dumby_data.to(device), model_v(dumby_data.to(device)).to(device))))    
-    dummy_perc = F.softmax(logits, dim=1)*100
-    format_result(dummy_perc)
+    print("\n From test data")   
+    randomSamples = torch.from_numpy(gen.choice(test_data_v, 10, replace=False)).type(torch.FloatTensor).to(device)
+    logits = model_a(torch.hstack((randomSamples.to(device), F.softmax(model_v(randomSamples.to(device)).to(device), dim=1))))    
+    results = F.softmax(logits, dim=1)*100
+    format_result(results)
+    print(results)
     
 
 
