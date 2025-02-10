@@ -16,7 +16,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torchsummary import summary
 
-config_file = './../../env.yml'
+config_file = './env.yml'
 with open(config_file, 'r') as stream:
     yamlfile = yaml.safe_load(stream)
     root_dir = yamlfile['root_dir']
@@ -28,11 +28,11 @@ sys.path.append(root_dir)
 # print(src_dir)
 sys.path.append(os.path.join(src_dir, 'attack'))
 sys.path.append(os.path.join(src_dir, 'models'))
-sys.path.insert(0, './../AdversarialMLProject1')
+sys.path.insert(0, './../Project1')
 from utils import mkdir_p, AverageMeter, accuracy, print_acc_conf
 
 # NOTE: Here is the victim model definition.
-sys.path.insert(0, './../../models')
+sys.path.insert(0, './models')
 from purchase import PurchaseClassifier
 
 
@@ -136,11 +136,11 @@ def train_model(model, train_data, train_label, test_data, test_label, epochs, b
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     criterion = nn.CrossEntropyLoss().to(device, torch.float)
 
-    train_data_tensor = torch.from_numpy(train_data).type(torch.FloatTensor)
-    train_label_tensor = torch.from_numpy(train_label).type(torch.LongTensor)
+    train_data_tensor = torch.from_numpy(train_data).type(torch.FloatTensor).to(device)
+    train_label_tensor = torch.from_numpy(train_label).type(torch.LongTensor).to(device)
 
-    test_data_tensor = torch.from_numpy(test_data).type(torch.FloatTensor)
-    test_label_tensor = torch.from_numpy(test_label).type(torch.LongTensor)
+    test_data_tensor = torch.from_numpy(test_data).type(torch.FloatTensor).to(device)
+    test_label_tensor = torch.from_numpy(test_label).type(torch.LongTensor).to(device)
 
     saved_epoch = 0
     best_acc = 0.0
@@ -150,8 +150,8 @@ def train_model(model, train_data, train_label, test_data, test_label, epochs, b
         np.random.shuffle(r)
         train_data = train_data[r]
         train_label = train_label[r]
-        train_data_tensor = torch.from_numpy(train_data).type(torch.FloatTensor)
-        train_label_tensor = torch.from_numpy(train_label).type(torch.LongTensor)
+        train_data_tensor = torch.from_numpy(train_data).type(torch.FloatTensor).to(device)
+        train_label_tensor = torch.from_numpy(train_label).type(torch.LongTensor).to(device)
 
         train_loss, trainning_acc = train(train_data_tensor, train_label_tensor, model, criterion, optimizer, batch_size)
 
@@ -190,7 +190,7 @@ def attack_data(model, train_data, test_data):
     train_outputs = F.softmax(model(train_inputs),dim=1)
     
     test_inputs = torch.from_numpy(test_data).type(torch.FloatTensor).to(device)
-    test_outputs = F.softmax(model(train_inputs),dim=1)  
+    test_outputs = F.softmax(model(test_inputs),dim=1)  
 
     zerovec = np.full(len(test_data), 0)
     onevec = np.full(len(train_data), 1)
@@ -198,11 +198,52 @@ def attack_data(model, train_data, test_data):
     pre_xta = torch.cat((train_outputs, test_outputs)).detach().cpu().numpy()
     data_a = np.hstack((np.vstack((train_inputs.detach().cpu().numpy(),test_inputs.detach().cpu().numpy())),
                         pre_xta))
+    
+    # print(len(data_a[0]))
+    # print(data_a[0].shape)
+    # print(train_inputs.shape)
+    # print(train_outputs.shape)
+    
     label_a = np.hstack((onevec,zerovec))
+
+    # [1, 1 ,..., softmax out ...],  <- 1x700
+    # [1, 1, ... softmax ..], 
+    # [1, 1, ....], [1, 1, ....]
+    # 
+
+    # label_a = [1, 1, 1, ... , 0, 0, 0, 0, 0]
 
     return data_a, label_a
 
 
+
+def attack_data2(model, train_data, test_data):
+
+    # if not train_data.is_cuda:
+    #     train_data.to(device)
+    # elif not test_data.is_cuda:
+    #     test_data.to(device)
+
+    model.eval()
+
+    train_inputs = torch.from_numpy(train_data).type(torch.FloatTensor).to(device)
+    train_outputs = F.softmax(model(train_inputs),dim=1)
+
+    test_inputs = torch.from_numpy(test_data).type(torch.FloatTensor).to(device)
+    test_outputs = F.softmax(model(test_inputs),dim=1)  
+
+    zerovec = np.full(len(test_data), 0)
+    onevec = np.full(len(train_data), 1)
+
+    pre_xta = torch.cat((train_outputs, test_outputs)).detach().cpu().numpy()
+    pre_xtb = torch.cat((test_inputs, test_outputs), dim=1).detach().cpu().numpy()
+
+    data_a = np.vstack((pre_xta, pre_xtb))
+    label_a = np.hstack((onevec,zerovec))
+
+    return data_a, label_a
+
+ 
 
 
 # Use this to format our results when manually evaluating model
@@ -323,9 +364,10 @@ def main():
     # print(results)
 
     print("\n From test data")   
-    randomSamples = torch.from_numpy(gen.choice(test_data_v, 10, replace=False)).type(torch.FloatTensor).to(device)
-    logits = model_a(torch.hstack((randomSamples.to(device), F.softmax(model_v(randomSamples.to(device)).to(device), dim=1))))    
-    results = F.softmax(logits, dim=1)*100
+    test_samples = torch.from_numpy(test_a[0:10][:]).type(torch.FloatTensor).to(device)
+    #randomSamples = torch.from_numpy(gen.choice(test_data_v, 10, replace=False)).type(torch.FloatTensor).to(device)
+    #logits = model_a(torch.hstack((randomSamples.to(device), F.softmax(model_v(randomSamples.to(device)).to(device), dim=1))))    
+    results = F.softmax(model_a(test_samples), dim=1)*100
     format_result(results)
     print(results)
     
