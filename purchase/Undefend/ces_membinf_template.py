@@ -28,7 +28,7 @@ sys.path.append(root_dir)
 # print(src_dir)
 sys.path.append(os.path.join(src_dir, 'attack'))
 sys.path.append(os.path.join(src_dir, 'models'))
-sys.path.insert(0, './../../../Project1')
+sys.path.insert(0, './../AdversarialMLProject1')
 from utils import mkdir_p, AverageMeter, accuracy, print_acc_conf
 
 # NOTE: Here is the victim model definition.
