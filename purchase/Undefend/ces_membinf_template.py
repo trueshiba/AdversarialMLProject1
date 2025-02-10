@@ -16,7 +16,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torchsummary import summary
 
-config_file = './../env.yml'
+config_file = './env.yml'
 with open(config_file, 'r') as stream:
     yamlfile = yaml.safe_load(stream)
     root_dir = yamlfile['root_dir']
@@ -28,7 +28,7 @@ sys.path.append(root_dir)
 # print(src_dir)
 sys.path.append(os.path.join(src_dir, 'attack'))
 sys.path.append(os.path.join(src_dir, 'models'))
-sys.path.insert(0, './../../../Project1')
+sys.path.insert(0, './../AdversarialMLProject1')
 from utils import mkdir_p, AverageMeter, accuracy, print_acc_conf
 
 # NOTE: Here is the victim model definition.
