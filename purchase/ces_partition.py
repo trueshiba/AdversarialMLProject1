@@ -48,8 +48,8 @@ def main():
     X = X[r]
     Y = Y[r]
 
-    train_ratio = .1
-    test_ratio = .1
+    train_ratio = .05
+    test_ratio = .05
 
     # Victim training and test sets are both 10% of complete dataset and disjoint.
     train_v_start = 0

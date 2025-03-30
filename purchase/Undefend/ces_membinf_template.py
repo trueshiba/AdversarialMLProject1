@@ -177,7 +177,7 @@ def train_model(model, train_data, train_label, test_data, test_label, epochs, b
 # the softmax outer layer and append it to each input sample for inclusion
 # in the attack dataset, with label 0 if the sample comes from test_data,
 # and 1 if the sample comes from train_data.
-def attack_data(model, train_data, test_data):
+def attack_data(model, train_data, train_label, test_data, test_label):
 
     # if not train_data.is_cuda:
     #     train_data.to(device)
@@ -188,14 +188,16 @@ def attack_data(model, train_data, test_data):
     
     train_inputs = torch.from_numpy(train_data).type(torch.FloatTensor).to(device)
     train_outputs = F.softmax(model(train_inputs),dim=1)
-    
+    train_outputs_with_labels = torch.cat((train_outputs, train_label), dim=1)
+
     test_inputs = torch.from_numpy(test_data).type(torch.FloatTensor).to(device)
     test_outputs = F.softmax(model(test_inputs),dim=1)  
+    test_outputs_with_labels = torch.cat((test_outputs, test_label), dim=1)
 
     zerovec = np.full(len(test_data), 0)
     onevec = np.full(len(train_data), 1)
 
-    pre_xta = torch.cat((train_outputs, test_outputs)).detach().cpu().numpy()
+    pre_xta = torch.cat((train_outputs_with_labels, test_outputs_with_labels)).detach().cpu().numpy()
     data_a = np.hstack((np.vstack((train_inputs.detach().cpu().numpy(),test_inputs.detach().cpu().numpy())),
                         pre_xta))
     
@@ -329,7 +331,7 @@ def main():
     model_a = AttackModel()
 
     # Use attack_data() to get attack model dataset
-    data_a, label_a = attack_data(model_s, train_data_s, test_data_s)
+    data_a, label_a = attack_data(model_s, train_data_s, train_label_s, test_data_s, test_label_s)
 
     summary(model_a, (512, 700))
     # big_data = np.concatenate((train_data_v, test_data_v))
