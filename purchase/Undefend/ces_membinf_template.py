@@ -15,6 +15,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torchsummary import summary
+import opacus
 
 config_file = './env.yml'
 with open(config_file, 'r') as stream:
@@ -53,6 +54,7 @@ def train(train_data, train_labels, model, criterion, optimizer, batch_size):
     # switch to train mode
     model.train()
 
+    
     losses = AverageMeter()
     top1 = AverageMeter()
 
@@ -131,9 +133,14 @@ def save_checkpoint(state, is_best, checkpoint, filename='checkpoint.pth.tar'):
 
 
 
-def train_model(model, train_data, train_label, test_data, test_label, epochs, batch_size):
+def train_model(model, train_data, train_label, test_data, test_label, epochs, batch_size, enable_dp = False):
     model = model.to(device,torch.float)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+    # if enable_dp:
+    #     (model, optimizer, dataloader) = make_private_with_epsilon(model, optimizer, ...)
+
+
     criterion = nn.CrossEntropyLoss().to(device, torch.float)
 
     train_data_tensor = torch.from_numpy(train_data).type(torch.FloatTensor).to(device)
@@ -307,7 +314,7 @@ def main():
     model_v = PurchaseClassifier()
     train_model(model_v,
                 train_data_v, train_label_v, test_data_v, test_label_v,
-                classifier_epochs, batch_size)
+                classifier_epochs, batch_size, True)
     
 
 
