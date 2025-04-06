@@ -20,7 +20,7 @@ class AttackModel(nn.Module):
         # self.classifier = nn.Linear(128,num_classes)
 
         self.features = nn.Sequential(
-            nn.Linear(700, 1024),
+            nn.Linear(200, 1024),
             nn.ReLU(),
             #nn.BatchNorm1d(1024), 
             nn.Dropout(0.3),  
