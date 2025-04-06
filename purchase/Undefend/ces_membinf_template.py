@@ -14,7 +14,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torchsummary import summary
+from tqdm import tqdm
+from opacus import PrivacyEngine
+from opacus.accountants.utils import get_noise_multiplier
 
 # Might need to cd into Undefend for this
 config_file = './../../env.yml'
@@ -36,46 +38,16 @@ sys.path.insert(0, './../../models')
 from purchase import PurchaseClassifier
 
 
-
 # This is our adversary model we import from within the models directory
 from adversary import AttackModel
 
 
+# Privacy engine
+privacy_engine = PrivacyEngine()
 
 # Set to run on GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
-
-
-def train_eval(test_data, labels, model, criterion, batch_size):
-    # switch to evaluate mode
-    model.eval()
-
-    losses = AverageMeter()
-    top1 = AverageMeter()
-
-    len_t = int(np.ceil(len(test_data)/batch_size))
-    infer_np = np.zeros((len(test_data), 100))
-
-    for batch_ind in range(len_t):
-        # measure data loading time
-        end_idx = min(len(test_data), (batch_ind+1)*batch_size)
-        inputs = test_data[batch_ind*batch_size: end_idx].to(device, torch.float)
-        targets = labels[batch_ind*batch_size: end_idx].to(device, torch.long)
-
-        # compute output
-        outputs = model(inputs)
-        loss = criterion(outputs, targets)      
-
-        # measure accuracy and record loss
-        prec1, prec2 = accuracy(outputs.data, targets.data, topk=(1,2))
-        losses.update(loss.item(), inputs.size()[0])
-        top1.update(prec1.item()/100.0, inputs.size()[0])
-
-    return (losses.avg, top1.avg, 0)
-
-
-
 
 
 def save_checkpoint(state, is_best, checkpoint, filename='checkpoint.pth.tar'):
@@ -87,10 +59,9 @@ def save_checkpoint(state, is_best, checkpoint, filename='checkpoint.pth.tar'):
         shutil.copyfile(filepath, os.path.join(checkpoint, 'model_best.pth.tar'))
 
 
-def train_model(model, train_data, train_label, epochs, optimizer, batch_size):
-    model = model.to(device,torch.float)
+def train_model(model, train_data, train_label, epochs, optimizer, batch_size, differentially_private_on=False):
+    model = model.to(device, torch.float)
     criterion = nn.CrossEntropyLoss().to(device, torch.float)
-
 
     train_dataset = torch.utils.data.TensorDataset(
         torch.tensor(train_data, dtype=torch.float32),
@@ -99,6 +70,26 @@ def train_model(model, train_data, train_label, epochs, optimizer, batch_size):
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
+    # Change parameters to acheive best DP and calculate a predicted noise multiplier for a given epsilon
+    if differentially_private_on:
+
+        epsilon = float("inf")
+        delta = 1e-5
+        optimal_nm = get_noise_multiplier(target_epsilon=epsilon, target_delta=delta, sample_rate=batch_size/train_data.shape[0], epochs=epochs)
+        print(f"Calculated noise multiplier for epsilon {epsilon} : {optimal_nm}")
+
+        model, optimizer, train_loader = privacy_engine.make_private(
+
+            module=model,
+            optimizer=optimizer,
+            data_loader=train_loader,
+            noise_multiplier=optimal_nm,
+            max_grad_norm=1.0,
+
+            )
+        
+        
+
     saved_epoch = 0
     best_acc = 0.0
 
@@ -106,7 +97,7 @@ def train_model(model, train_data, train_label, epochs, optimizer, batch_size):
 
         running_loss = 0.0
 
-        for _batch_idx, (inputs, labels) in enumerate(train_loader):
+        for _batch_idx, (inputs, labels) in enumerate(tqdm(train_loader)):
             inputs, labels = inputs.to(device), labels.to(device)
             
             # Zero the gradients
@@ -125,9 +116,11 @@ def train_model(model, train_data, train_label, epochs, optimizer, batch_size):
             # Track the loss
             running_loss += loss.item()
         
-        # Print the average loss for the epoch
-        # if report_loss: 
+        # Print the average loss for the epoch 
         print(f"Epoch {epoch+1}/{epochs}, Loss: {running_loss / len(train_loader)}")
+        if differentially_private_on:
+            print(f"Epsilon: {privacy_engine.get_epsilon(delta)}")
+        
 
 
 
@@ -224,24 +217,29 @@ def main():
     lr = args.lr
 
     DATASET_PATH = os.path.join(root_dir, 'purchase', 'data')
-  
+
+    
     
     # ============ VICTIM CLASSIFIER ============
     # Training the victim model. Hyperparameters can be provided at command-line
     # with defaults defined at beginning of main above. Note that the victim model
     # neural architecture is defined in MIAdefenseSELENA/models/purchase.py.
 
+    enable_differential_privacy = True
+
     train_data_v = np.load(os.path.join(DATASET_PATH, 'partition', 'train_data_v.npy'))
     train_label_v = np.load(os.path.join(DATASET_PATH, 'partition', 'train_label_v.npy'))
     test_data_v = np.load(os.path.join(DATASET_PATH, 'partition', 'test_data_v.npy'))
     test_label_v = np.load(os.path.join(DATASET_PATH, 'partition', 'test_label_v.npy'))
 
-    print("VICTIM CLASSIFIER TRAINING/EVALUATION")
 
+    print("VICTIM CLASSIFIER TRAINING/EVALUATION")
+    print(f"Differential Privacy status: {enable_differential_privacy}")
+    
     model_v = PurchaseClassifier()
     optimizer = optim.Adam(model_v.parameters(), lr=lr)
 
-    train_model(model_v, train_data_v, train_label_v, classifier_epochs, optimizer, batch_size)
+    train_model(model_v, train_data_v, train_label_v, classifier_epochs, optimizer, batch_size, enable_differential_privacy)
     
 
     # ============ SHADOW MODEL ============
